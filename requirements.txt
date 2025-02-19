@@ -1,12 +1,8 @@
 diffusers
-torch
-torchaudio
-torchvision
 transformers
 imageio
 imageio-ffmpeg
 omegaconf
-tqdm
 librosa
 einops
 #tqdm ==4.65.2
@@ -16,6 +12,3 @@ einops
 #gradio==3.50.0
 #transformers ==4.43.2
 #imageio ==2.31.1
-#torchvision ==0.17.1
-#torch ==2.2.1
-#diffusers ==0.29.0
