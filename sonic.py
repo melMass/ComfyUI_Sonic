@@ -110,16 +110,20 @@ def preprocess_face(face_image, face_det, expand_ratio=1.0):
     _, _, bboxes = face_det(face_image, maxface=True)
     face_num = len(bboxes)
     bbox = []
+
+    bbox_s: list[int] = []
     if face_num > 0:
         x1, y1, ww, hh = bboxes[0]
         x2, y2 = x1 + ww, y1 + hh
         bbox = x1, y1, x2, y2
         bbox_s = process_bbox(bbox, expand_radio=expand_ratio, height=h, width=w)
 
-    return {
-        "face_num": face_num,
-        "crop_bbox": bbox_s,
-    }
+        return {
+            "face_num": face_num,
+            "crop_bbox": bbox_s,
+        }
+
+    raise ValueError("No faces found")
 
 
 def crop_face_image(face_image, crop_bbox):
