@@ -239,7 +239,7 @@ class SONIC_PreData:
         print(
             f"Input audio duration is {duration_input} seconds, infer audio duration is: {duration} seconds."
         )
-        # 减少音频数据传递导致的不必要文件存储
+        # Reduce unnecessary file storage caused by audio data transfer
         buff = io.BytesIO()
         torchaudio.save(
             buff, audio["waveform"].squeeze(0), audio["sample_rate"], format="FLAC"
@@ -252,7 +252,7 @@ class SONIC_PreData:
 
         face_det = AlignImage(device, det_path=yolo_ckpt)
 
-        # 先面部裁切处理
+        # Face cropping first
         cv_image = tensor2cv(image)
         face_info = preprocess_face(cv_image, face_det, expand_ratio=expand_ratio)
         if face_info["face_num"] > 0:
@@ -373,11 +373,11 @@ class SONICSampler:
 
     def sampler_main(self, model, data_dict, seed, inference_steps, dynamic_scale, fps):
         print("***********Start infer  ***********")
-        # # 当前分配的 CUDA 内存
+        # # Current allocated CUDA memory
         # current_memory = torch.cuda.memory_allocated()
         # print(f"Current CUDA memory allocated: {current_memory / 1024**2} MB")
 
-        # # 历史最大分配的 CUDA 内存
+        # # Historical maximum allocated CUDA memory
         # max_memory = torch.cuda.max_memory_allocated()
         # print(f"Max CUDA memory allocated: {max_memory / 1024**2} MB")
 
