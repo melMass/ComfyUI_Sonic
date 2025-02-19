@@ -1,17 +1,12 @@
-
-import math
 import warnings
-from typing import List, Optional, Tuple, Union
 
-import numpy as np
-import PIL.Image
 import torch
 import torch.nn.functional as F
-from PIL import Image, ImageFilter, ImageOps
 
-from diffusers.configuration_utils import ConfigMixin, register_to_config
-from diffusers.utils import CONFIG_NAME, PIL_INTERPOLATION, deprecate
+from diffusers.configuration_utils import register_to_config
+from diffusers.utils import CONFIG_NAME
 from diffusers.image_processor import VaeImageProcessor
+
 
 class IPAdapterMaskProcessor(VaeImageProcessor):
     """
@@ -55,7 +50,9 @@ class IPAdapterMaskProcessor(VaeImageProcessor):
         )
 
     @staticmethod
-    def downsample(mask: torch.Tensor, batch_size: int, num_queries: int, value_embed_dim: int):
+    def downsample(
+        mask: torch.Tensor, batch_size: int, num_queries: int, value_embed_dim: int
+    ):
         """
         Downsamples the provided mask tensor to match the expected dimensions for scaled dot-product attention. If the
         aspect ratio of the mask does not match the aspect ratio of the output image, a warning is issued.
@@ -82,7 +79,9 @@ class IPAdapterMaskProcessor(VaeImageProcessor):
         mask_h = int(mask_h) + int((num_queries % int(mask_h)) != 0)
         mask_w = num_queries // mask_h
 
-        mask_downsample = F.interpolate(mask.unsqueeze(0), size=(mask_h, mask_w), mode="bicubic").squeeze(0)
+        mask_downsample = F.interpolate(
+            mask.unsqueeze(0), size=(mask_h, mask_w), mode="bicubic"
+        ).squeeze(0)
 
         # Repeat batch_size times
         if mask_downsample.shape[0] < batch_size:
@@ -99,7 +98,9 @@ class IPAdapterMaskProcessor(VaeImageProcessor):
                 "Please update your masks or adjust the output size for optimal performance.",
                 UserWarning,
             )
-            mask_downsample = F.pad(mask_downsample, (0, num_queries - mask_downsample.shape[1]), value=0.0)
+            mask_downsample = F.pad(
+                mask_downsample, (0, num_queries - mask_downsample.shape[1]), value=0.0
+            )
         # Discard last embeddings if downsampled_mask.shape[1] is bigger than num_queries
         if downsampled_area > num_queries:
             warnings.warn(
@@ -110,8 +111,9 @@ class IPAdapterMaskProcessor(VaeImageProcessor):
             mask_downsample = mask_downsample[:, :num_queries]
 
         # Repeat last dimension to match SDPA output shape
-        mask_downsample = mask_downsample.view(mask_downsample.shape[0], mask_downsample.shape[1], 1).repeat(
-            1, 1, value_embed_dim
-        )
+        mask_downsample = mask_downsample.view(
+            mask_downsample.shape[0], mask_downsample.shape[1], 1
+        ).repeat(1, 1, value_embed_dim)
 
         return mask_downsample
+

@@ -12,7 +12,14 @@ from diffusers.utils import BaseOutput, logging
 from diffusers.models.embeddings import TimestepEmbedding, Timesteps
 from diffusers.models.modeling_utils import ModelMixin
 from .unet_3d_blocks import UNetMidBlockSpatioTemporal, get_down_block, get_up_block
-from .attention_processor import CROSS_ATTENTION_PROCESSORS, AttentionProcessor, AttnProcessor, AttnProcessor2_0, IPAdapterAttnProcessor, IPAdapterAttnProcessor2_0
+from .attention_processor import (
+    CROSS_ATTENTION_PROCESSORS,
+    AttentionProcessor,
+    AttnProcessor,
+    AttnProcessor2_0,
+    IPAdapterAttnProcessor,
+    IPAdapterAttnProcessor2_0,
+)
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -30,7 +37,9 @@ class UNetSpatioTemporalConditionOutput(BaseOutput):
     sample: torch.Tensor = None
 
 
-class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin):
+class UNetSpatioTemporalConditionModel(
+    ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin
+):
     r"""
     A conditional Spatio-Temporal UNet model that takes a noisy video frames, conditional state, and a timestep and
     returns a sample shaped output.
@@ -110,17 +119,23 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
                 f"Must provide the same number of `block_out_channels` as `down_block_types`. `block_out_channels`: {block_out_channels}. `down_block_types`: {down_block_types}."
             )
 
-        if not isinstance(num_attention_heads, int) and len(num_attention_heads) != len(down_block_types):
+        if not isinstance(num_attention_heads, int) and len(num_attention_heads) != len(
+            down_block_types
+        ):
             raise ValueError(
                 f"Must provide the same number of `num_attention_heads` as `down_block_types`. `num_attention_heads`: {num_attention_heads}. `down_block_types`: {down_block_types}."
             )
 
-        if isinstance(cross_attention_dim, list) and len(cross_attention_dim) != len(down_block_types):
+        if isinstance(cross_attention_dim, list) and len(cross_attention_dim) != len(
+            down_block_types
+        ):
             raise ValueError(
                 f"Must provide the same number of `cross_attention_dim` as `down_block_types`. `cross_attention_dim`: {cross_attention_dim}. `down_block_types`: {down_block_types}."
             )
 
-        if not isinstance(layers_per_block, int) and len(layers_per_block) != len(down_block_types):
+        if not isinstance(layers_per_block, int) and len(layers_per_block) != len(
+            down_block_types
+        ):
             raise ValueError(
                 f"Must provide the same number of `layers_per_block` as `down_block_types`. `layers_per_block`: {layers_per_block}. `down_block_types`: {down_block_types}."
             )
@@ -141,8 +156,12 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
 
         self.time_embedding = TimestepEmbedding(timestep_input_dim, time_embed_dim)
 
-        self.add_time_proj = Timesteps(addition_time_embed_dim, True, downscale_freq_shift=0)
-        self.add_embedding = TimestepEmbedding(projection_class_embeddings_input_dim, time_embed_dim)
+        self.add_time_proj = Timesteps(
+            addition_time_embed_dim, True, downscale_freq_shift=0
+        )
+        self.add_embedding = TimestepEmbedding(
+            projection_class_embeddings_input_dim, time_embed_dim
+        )
 
         self.down_blocks = nn.ModuleList([])
         self.up_blocks = nn.ModuleList([])
@@ -157,7 +176,9 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
             layers_per_block = [layers_per_block] * len(down_block_types)
 
         if isinstance(transformer_layers_per_block, int):
-            transformer_layers_per_block = [transformer_layers_per_block] * len(down_block_types)
+            transformer_layers_per_block = [transformer_layers_per_block] * len(
+                down_block_types
+            )
 
         blocks_time_embed_dim = time_embed_dim
 
@@ -200,7 +221,9 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
         reversed_num_attention_heads = list(reversed(num_attention_heads))
         reversed_layers_per_block = list(reversed(layers_per_block))
         reversed_cross_attention_dim = list(reversed(cross_attention_dim))
-        reversed_transformer_layers_per_block = list(reversed(transformer_layers_per_block))
+        reversed_transformer_layers_per_block = list(
+            reversed(transformer_layers_per_block)
+        )
 
         output_channel = reversed_block_out_channels[0]
         for i, up_block_type in enumerate(up_block_types):
@@ -208,7 +231,9 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
 
             prev_output_channel = output_channel
             output_channel = reversed_block_out_channels[i]
-            input_channel = reversed_block_out_channels[min(i + 1, len(block_out_channels) - 1)]
+            input_channel = reversed_block_out_channels[
+                min(i + 1, len(block_out_channels) - 1)
+            ]
 
             # add upsample block for all BUT final layer
             if not is_final_block:
@@ -236,7 +261,9 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
             prev_output_channel = output_channel
 
         # out
-        self.conv_norm_out = nn.GroupNorm(num_channels=block_out_channels[0], num_groups=32, eps=1e-5)
+        self.conv_norm_out = nn.GroupNorm(
+            num_channels=block_out_channels[0], num_groups=32, eps=1e-5
+        )
         self.conv_act = nn.SiLU()
 
         self.conv_out = nn.Conv2d(
@@ -274,7 +301,9 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
 
         return processors
 
-    def set_attn_processor(self, processor: Union[AttentionProcessor, Dict[str, AttentionProcessor]]):
+    def set_attn_processor(
+        self, processor: Union[AttentionProcessor, Dict[str, AttentionProcessor]]
+    ):
         r"""
         Sets the attention processor to use to compute attention.
 
@@ -312,7 +341,10 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
         """
         Disables custom attention processors and sets the default attention implementation.
         """
-        if all(proc.__class__ in CROSS_ATTENTION_PROCESSORS for proc in self.attn_processors.values()):
+        if all(
+            proc.__class__ in CROSS_ATTENTION_PROCESSORS
+            for proc in self.attn_processors.values()
+        ):
             processor = AttnProcessor()
         else:
             raise ValueError(
@@ -326,7 +358,9 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
             module.gradient_checkpointing = value
 
     # Copied from diffusers.models.unets.unet_3d_condition.UNet3DConditionModel.enable_forward_chunking
-    def enable_forward_chunking(self, chunk_size: Optional[int] = None, dim: int = 0) -> None:
+    def enable_forward_chunking(
+        self, chunk_size: Optional[int] = None, dim: int = 0
+    ) -> None:
         """
         Sets the attention processor to use [feed forward
         chunking](https://huggingface.co/blog/reformer#2-chunked-feed-forward-layers).
@@ -345,7 +379,9 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
         # By default chunk size is 1
         chunk_size = chunk_size or 1
 
-        def fn_recursive_feed_forward(module: torch.nn.Module, chunk_size: int, dim: int):
+        def fn_recursive_feed_forward(
+            module: torch.nn.Module, chunk_size: int, dim: int
+        ):
             if hasattr(module, "set_chunk_feed_forward"):
                 module.set_chunk_feed_forward(chunk_size=chunk_size, dim=dim)
 
@@ -411,18 +447,18 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
         # but time_embedding might actually be running in fp16. so we need to cast here.
         # there might be better ways to encapsulate this.
         t_emb = t_emb.to(dtype=sample.dtype)
-        
-        if  isinstance(encoder_hidden_states,tuple): 
-            if encoder_hidden_states[0].dtype==torch.bfloat16:
+
+        if isinstance(encoder_hidden_states, tuple):
+            if encoder_hidden_states[0].dtype == torch.bfloat16:
                 t_emb = t_emb.to(dtype=torch.bfloat16)
-        elif isinstance(encoder_hidden_states,torch.Tensor): 
-            if encoder_hidden_states.dtype==torch.bfloat16:
+        elif isinstance(encoder_hidden_states, torch.Tensor):
+            if encoder_hidden_states.dtype == torch.bfloat16:
                 t_emb = t_emb.to(dtype=torch.bfloat16)
         else:
             pass
-            
+
         emb = self.time_embedding(t_emb)
-        
+
         time_embeds = self.add_time_proj(added_time_ids.flatten())
         # import ipdb
         # ipdb.set_trace()
@@ -438,37 +474,45 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
         # emb: [batch, channels] -> [batch * frames, channels]
         emb = emb.repeat_interleave(num_frames, dim=0)
         # encoder_hidden_states: [batch, 1, channels] -> [batch * frames, 1, channels]
-        
+
         ### 20240731 process encoder_hidden_states ###
         if isinstance(encoder_hidden_states, tuple):
             # ip_hidden_states is a list
             encoder_hidden_states, ip_hidden_states = encoder_hidden_states
-            if encoder_hidden_states.shape[0]==batch_size:
-                encoder_hidden_states = encoder_hidden_states.repeat_interleave(num_frames, dim=0)
+            if encoder_hidden_states.shape[0] == batch_size:
+                encoder_hidden_states = encoder_hidden_states.repeat_interleave(
+                    num_frames, dim=0
+                )
             encoder_hidden_states = (encoder_hidden_states, ip_hidden_states)
-        elif encoder_hidden_states.shape[0]==batch_size:
+        elif encoder_hidden_states.shape[0] == batch_size:
             ### if framewised feature is not provided, repeat_interleave
-            encoder_hidden_states = encoder_hidden_states.repeat_interleave(num_frames, dim=0)
-            
+            encoder_hidden_states = encoder_hidden_states.repeat_interleave(
+                num_frames, dim=0
+            )
 
         # 2. pre-process
-        if  isinstance(encoder_hidden_states,tuple):
-            if encoder_hidden_states[0].dtype==torch.bfloat16:
-                sample = sample.to(emb.dtype) #to bf
-        elif isinstance(encoder_hidden_states,torch.Tensor): 
-            if encoder_hidden_states.dtype==torch.bfloat16:
+        if isinstance(encoder_hidden_states, tuple):
+            if encoder_hidden_states[0].dtype == torch.bfloat16:
+                sample = sample.to(emb.dtype)  # to bf
+        elif isinstance(encoder_hidden_states, torch.Tensor):
+            if encoder_hidden_states.dtype == torch.bfloat16:
                 sample = sample.to(emb.dtype)
         sample = self.conv_in(sample)
-        
+
         ### 20240731 add spatial_condition here ###
         if spatial_condition is not None:
-            sample = sample + spatial_condition.flatten(0,1)
+            sample = sample + spatial_condition.flatten(0, 1)
 
-        image_only_indicator = torch.zeros(batch_size, num_frames, dtype=sample.dtype, device=sample.device)
+        image_only_indicator = torch.zeros(
+            batch_size, num_frames, dtype=sample.dtype, device=sample.device
+        )
 
         down_block_res_samples = (sample,)
         for downsample_block in self.down_blocks:
-            if hasattr(downsample_block, "has_cross_attention") and downsample_block.has_cross_attention:
+            if (
+                hasattr(downsample_block, "has_cross_attention")
+                and downsample_block.has_cross_attention
+            ):
                 sample, res_samples = downsample_block(
                     hidden_states=sample,
                     temb=emb,
@@ -497,9 +541,14 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
         # 5. up
         for i, upsample_block in enumerate(self.up_blocks):
             res_samples = down_block_res_samples[-len(upsample_block.resnets) :]
-            down_block_res_samples = down_block_res_samples[: -len(upsample_block.resnets)]
+            down_block_res_samples = down_block_res_samples[
+                : -len(upsample_block.resnets)
+            ]
 
-            if hasattr(upsample_block, "has_cross_attention") and upsample_block.has_cross_attention:
+            if (
+                hasattr(upsample_block, "has_cross_attention")
+                and upsample_block.has_cross_attention
+            ):
                 sample = upsample_block(
                     hidden_states=sample,
                     temb=emb,
@@ -530,17 +579,26 @@ class UNetSpatioTemporalConditionModel(ModelMixin, ConfigMixin, UNet2DConditionL
         return UNetSpatioTemporalConditionOutput(sample=sample)
 
 
+def add_ip_adapters(
+    unet,
+    num_adapter_embeds=[
+        32,
+    ],
+    scale=[
+        1.0,
+    ],
+):
+    assert len(num_adapter_embeds) == len(scale)
 
-def add_ip_adapters(unet, num_adapter_embeds=[32,], scale=[1.0,]):
-    
-    assert len(num_adapter_embeds)==len(scale)
-    
-    
     # init adapter modules
     attn_procs = {}
     unet_sd = unet.state_dict()
     for name in unet.attn_processors.keys():
-        cross_attention_dim = None if name.endswith("attn1.processor") else unet.config.cross_attention_dim
+        cross_attention_dim = (
+            None
+            if name.endswith("attn1.processor")
+            else unet.config.cross_attention_dim
+        )
         if name.startswith("mid_block"):
             hidden_size = unet.config.block_out_channels[-1]
         elif name.startswith("up_blocks"):
@@ -552,64 +610,70 @@ def add_ip_adapters(unet, num_adapter_embeds=[32,], scale=[1.0,]):
         # if cross_attention_dim is None or "temporal_transformer_blocks" in name:
         if cross_attention_dim is None:
             attn_processor_class = (
-                    AttnProcessor2_0 if hasattr(torch.nn.functional, "scaled_dot_product_attention") else AttnProcessor
-                )
+                AttnProcessor2_0
+                if hasattr(torch.nn.functional, "scaled_dot_product_attention")
+                else AttnProcessor
+            )
             attn_procs[name] = attn_processor_class()
         else:
             attn_processor_class = (
-                    IPAdapterAttnProcessor2_0 if hasattr(torch.nn.functional, "scaled_dot_product_attention") else IPAdapterAttnProcessor
-                )
-            
+                IPAdapterAttnProcessor2_0
+                if hasattr(torch.nn.functional, "scaled_dot_product_attention")
+                else IPAdapterAttnProcessor
+            )
+
             attn_procs[name] = attn_processor_class(
-                        hidden_size=hidden_size,
-                        cross_attention_dim=cross_attention_dim,
-                        num_tokens=num_adapter_embeds,
-                        scale=scale
-                    ).to(device=unet.device, dtype=unet.dtype)
+                hidden_size=hidden_size,
+                cross_attention_dim=cross_attention_dim,
+                num_tokens=num_adapter_embeds,
+                scale=scale,
+            ).to(device=unet.device, dtype=unet.dtype)
 
             layer_name = name.split(".processor")[0]
             weights = {}
-         
+
             for i in range(len(num_adapter_embeds)):
-                weights.update({f"to_k_ip.{i}.weight": unet_sd[layer_name + ".to_k.weight"]})
-                weights.update({f"to_v_ip.{i}.weight": unet_sd[layer_name + ".to_v.weight"]})
-                    
-    
+                weights.update(
+                    {f"to_k_ip.{i}.weight": unet_sd[layer_name + ".to_k.weight"]}
+                )
+                weights.update(
+                    {f"to_v_ip.{i}.weight": unet_sd[layer_name + ".to_v.weight"]}
+                )
+
             attn_procs[name].load_state_dict(weights)
 
     unet.set_attn_processor(attn_procs)
 
-    adapter_modules = torch.nn.ModuleList([m for m in unet.attn_processors.values() if isinstance(m, IPAdapterAttnProcessor) or isinstance(m, IPAdapterAttnProcessor2_0)])
+    adapter_modules = torch.nn.ModuleList(
+        [
+            m
+            for m in unet.attn_processors.values()
+            if isinstance(m, IPAdapterAttnProcessor)
+            or isinstance(m, IPAdapterAttnProcessor2_0)
+        ]
+    )
     return adapter_modules
 
 
 def load_adapter_states(adapter_modules, state_dict_list):
-    assert len(state_dict_list)>0
-    
+    assert len(state_dict_list) > 0
+
     merged_stete_dict = {}
     for state_dict in state_dict_list:
         for k, v in state_dict.items():
             if k in merged_stete_dict.keys():
-                k_split = k.split('.')
+                k_split = k.split(".")
                 adapter_idx = int(k_split[2])
                 adapter_idx += 1
                 k_split[2] = str(adapter_idx)
-                new_k = '.'.join(k_split)
-                while(new_k in merged_stete_dict.keys()):
+                new_k = ".".join(k_split)
+                while new_k in merged_stete_dict.keys():
                     adapter_idx += 1
                     k_split[2] = str(adapter_idx)
-                    new_k = '.'.join(k_split)
-                merged_stete_dict[new_k] = v    
+                    new_k = ".".join(k_split)
+                merged_stete_dict[new_k] = v
             else:
                 merged_stete_dict[k] = v
-                
+
     info = adapter_modules.load_state_dict(merged_stete_dict, strict=True)
     return info
-            
-        
-        
-            
-        
-    
-        
-    
