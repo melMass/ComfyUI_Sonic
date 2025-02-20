@@ -3,6 +3,7 @@ import torch
 import torch.utils.checkpoint
 from tqdm import tqdm
 import gc
+import comfy.utils
 
 from .src.utils.util import seed_everything
 from .src.dataset.test_preprocess import process_bbox
@@ -80,7 +81,9 @@ def sonic_predata(
     audio_tensor_list = []
     uncond_audio_tensor_list = []
     motion_buckets = []
-    for i in tqdm(range(audio_len // step)):
+
+    pbar = comfy.utils.ProgressBar(audio_len // step)
+    for i in range(audio_len // step):
         audio_clip = audio_prompts[:, i * 2 * step : i * 2 * step + 10].unsqueeze(0)
         audio_clip_for_bucket = last_audio_prompts[
             :, i * 2 * step : i * 2 * step + 50
@@ -95,6 +98,7 @@ def sonic_predata(
         ref_tensor_list.append(ref_img[0])
         audio_tensor_list.append(cond_audio_clip[0])
         uncond_audio_tensor_list.append(uncond_audio_clip[0])
+        pbar.update(1)
 
     return (
         ref_tensor_list,

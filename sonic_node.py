@@ -381,7 +381,7 @@ class SONICSampler:
         # max_memory = torch.cuda.max_memory_allocated()
         # print(f"Max CUDA memory allocated: {max_memory / 1024**2} MB")
 
-        iamge = model.process(
+        image = model.process(
             data_dict["audio_tensor_list"],
             data_dict["uncond_audio_tensor_list"],
             data_dict["motion_buckets"],
@@ -397,7 +397,7 @@ class SONICSampler:
         )
         gc.collect()
         torch.cuda.empty_cache()
-        return (iamge.permute(0, 2, 3, 4, 1).squeeze(0), fps)
+        return (image.permute(0, 2, 3, 4, 1).squeeze(0), fps)
 
 
 NODE_CLASS_MAPPINGS = {

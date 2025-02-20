@@ -1,6 +1,7 @@
 import inspect
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Union
+import comfy.utils
 
 import numpy as np
 import PIL.Image
@@ -579,122 +580,121 @@ class SonicPipeline(DiffusionPipeline):
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         self._num_timesteps = len(timesteps)
         shift = 0
-        with self.progress_bar(total=num_inference_steps) as progress_bar:
-            for i, t in enumerate(timesteps):
-                # init
-                pred_latents = torch.zeros_like(
-                    latents_all,
-                    dtype=self.unet.dtype,
+        pbar = comfy.utils.ProgressBar(num_inference_steps)
+
+        # with self.progress_bar(total=num_inference_steps) as progress_bar:
+        for i, t in enumerate(timesteps):
+            # init
+            pred_latents = torch.zeros_like(
+                latents_all,
+                dtype=self.unet.dtype,
+            )
+            counter = torch.zeros(
+                (latents_all.shape[0], num_frames, 1, 1, 1),
+                dtype=self.unet.dtype,
+            ).to(device=latents_all.device)
+
+            for batch, index_start in enumerate(
+                range(0, num_frames, frames_per_batch - overlap)
+            ):
+                self.scheduler._step_index = None
+                index_start -= shift
+
+                def indice_slice(tensor, idx_list):
+                    tensor_list = []
+                    for idx in idx_list:
+                        idx = idx % tensor.shape[1]
+                        tensor_list.append(tensor[:, idx])
+                    return torch.stack(tensor_list, 1)
+
+                idx_list = list(range(index_start, index_start + frames_per_batch))
+                latents = indice_slice(latents_all, idx_list)
+                image_latents_input = indice_slice(image_latents, idx_list)
+                batch_image_embeddings = indice_slice(image_embeddings, idx_list)
+                batch_audio_prompts = indice_slice(audio_prompts, idx_list)
+
+                cross_attention_kwargs = {"ip_adapter_masks": [face_mask]}
+                latent_model_input = (
+                    torch.cat([latents] * 3) if do_classifier_free_guidance else latents
                 )
-                counter = torch.zeros(
-                    (latents_all.shape[0], num_frames, 1, 1, 1),
-                    dtype=self.unet.dtype,
-                ).to(device=latents_all.device)
+                latent_model_input = self.scheduler.scale_model_input(
+                    latent_model_input, t
+                )
 
-                for batch, index_start in enumerate(
-                    range(0, num_frames, frames_per_batch - overlap)
-                ):
-                    self.scheduler._step_index = None
-                    index_start -= shift
+                # Concatenate image_latents over channels dimention
+                # print(latent_model_input.shape, image_latents_input.shape) #e([3, 25, 4, 64, 64]) torch.Size([3, 25, 4, 64, 64])
+                latent_model_input = torch.cat(
+                    [latent_model_input, image_latents_input], dim=2
+                )
 
-                    def indice_slice(tensor, idx_list):
-                        tensor_list = []
-                        for idx in idx_list:
-                            idx = idx % tensor.shape[1]
-                            tensor_list.append(tensor[:, idx])
-                        return torch.stack(tensor_list, 1)
+                motion_bucket = indice_slice(motion_buckets, idx_list)
+                motion_bucket = torch.mean(motion_bucket, dim=1).squeeze()
+                motion_bucket_id = motion_bucket[0]
+                motion_bucket_id_exp = motion_bucket[1]
+                added_time_ids = self._get_add_time_ids(
+                    fps,
+                    motion_bucket_id,
+                    motion_bucket_id_exp,
+                    image_embeddings.dtype,
+                    batch_size,
+                    num_videos_per_prompt,
+                    do_classifier_free_guidance,
+                )
+                added_time_ids = added_time_ids.to(device, dtype=self.unet.dtype)
 
-                    idx_list = list(range(index_start, index_start + frames_per_batch))
-                    latents = indice_slice(latents_all, idx_list)
-                    image_latents_input = indice_slice(image_latents, idx_list)
-                    batch_image_embeddings = indice_slice(image_embeddings, idx_list)
-                    batch_audio_prompts = indice_slice(audio_prompts, idx_list)
-
-                    cross_attention_kwargs = {"ip_adapter_masks": [face_mask]}
-                    latent_model_input = (
-                        torch.cat([latents] * 3)
-                        if do_classifier_free_guidance
-                        else latents
+                # predict the noise residual
+                noise_pred = self.unet(
+                    latent_model_input,
+                    t,
+                    encoder_hidden_states=(
+                        batch_image_embeddings.flatten(0, 1),
+                        [batch_audio_prompts.flatten(0, 1)],
+                    ),
+                    cross_attention_kwargs=cross_attention_kwargs,
+                    added_time_ids=added_time_ids,
+                    return_dict=False,
+                )[0]
+                # perform guidance
+                if do_classifier_free_guidance:
+                    noise_pred_uncond, noise_pred_drop_audio, noise_pred_cond = (
+                        noise_pred.chunk(3)
                     )
-                    latent_model_input = self.scheduler.scale_model_input(
-                        latent_model_input, t
+                    noise_pred = (
+                        noise_pred_uncond
+                        + self.guidance_scale1[i]
+                        * (noise_pred_drop_audio - noise_pred_uncond)
+                        + self.guidance_scale2[i]
+                        * (noise_pred_cond - noise_pred_drop_audio)
                     )
 
-                    # Concatenate image_latents over channels dimention
-                    # print(latent_model_input.shape, image_latents_input.shape) #e([3, 25, 4, 64, 64]) torch.Size([3, 25, 4, 64, 64])
-                    latent_model_input = torch.cat(
-                        [latent_model_input, image_latents_input], dim=2
-                    )
+                # compute the previous noisy sample x_t -> x_t-1
+                latents = self.scheduler.step(
+                    noise_pred, t.to(self.unet.dtype), latents
+                ).prev_sample
 
-                    motion_bucket = indice_slice(motion_buckets, idx_list)
-                    motion_bucket = torch.mean(motion_bucket, dim=1).squeeze()
-                    motion_bucket_id = motion_bucket[0]
-                    motion_bucket_id_exp = motion_bucket[1]
-                    added_time_ids = self._get_add_time_ids(
-                        fps,
-                        motion_bucket_id,
-                        motion_bucket_id_exp,
-                        image_embeddings.dtype,
-                        batch_size,
-                        num_videos_per_prompt,
-                        do_classifier_free_guidance,
-                    )
-                    added_time_ids = added_time_ids.to(device, dtype=self.unet.dtype)
+                if callback_on_step_end is not None:
+                    callback_kwargs = {}
+                    for k in callback_on_step_end_tensor_inputs:
+                        callback_kwargs[k] = locals()[k]
+                    callback_outputs = callback_on_step_end(self, i, t, callback_kwargs)
 
-                    # predict the noise residual
-                    noise_pred = self.unet(
-                        latent_model_input,
-                        t,
-                        encoder_hidden_states=(
-                            batch_image_embeddings.flatten(0, 1),
-                            [batch_audio_prompts.flatten(0, 1)],
-                        ),
-                        cross_attention_kwargs=cross_attention_kwargs,
-                        added_time_ids=added_time_ids,
-                        return_dict=False,
-                    )[0]
-                    # perform guidance
-                    if do_classifier_free_guidance:
-                        noise_pred_uncond, noise_pred_drop_audio, noise_pred_cond = (
-                            noise_pred.chunk(3)
-                        )
-                        noise_pred = (
-                            noise_pred_uncond
-                            + self.guidance_scale1[i]
-                            * (noise_pred_drop_audio - noise_pred_uncond)
-                            + self.guidance_scale2[i]
-                            * (noise_pred_cond - noise_pred_drop_audio)
-                        )
+                    latents = callback_outputs.pop("latents", latents)
 
-                    # compute the previous noisy sample x_t -> x_t-1
-                    latents = self.scheduler.step(
-                        noise_pred, t.to(self.unet.dtype), latents
-                    ).prev_sample
+                # if batch == 0:
+                for iii in range(frames_per_batch):
+                    p = (index_start + iii) % pred_latents.shape[1]
+                    pred_latents[:, p] += latents[:, iii]
+                    counter[:, p] += 1
+            shift += shift_offset
 
-                    if callback_on_step_end is not None:
-                        callback_kwargs = {}
-                        for k in callback_on_step_end_tensor_inputs:
-                            callback_kwargs[k] = locals()[k]
-                        callback_outputs = callback_on_step_end(
-                            self, i, t, callback_kwargs
-                        )
+            pred_latents = pred_latents / counter
+            latents_all = pred_latents
 
-                        latents = callback_outputs.pop("latents", latents)
-
-                    # if batch == 0:
-                    for iii in range(frames_per_batch):
-                        p = (index_start + iii) % pred_latents.shape[1]
-                        pred_latents[:, p] += latents[:, iii]
-                        counter[:, p] += 1
-                shift += shift_offset
-
-                pred_latents = pred_latents / counter
-                latents_all = pred_latents
-
-                if i == len(timesteps) - 1 or (
-                    (i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0
-                ):
-                    progress_bar.update()
+            if i == len(timesteps) - 1 or (
+                (i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0
+            ):
+                # progress_bar.update()
+                pbar.update(1)
 
         latents = latents_all
         if not output_type == "latent":
